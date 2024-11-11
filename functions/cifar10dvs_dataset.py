@@ -70,8 +70,8 @@ class CIFAR10DVS(Dataset):
         self.choices = ["roll", "rotate", "shear"]
 
         # For quick testing
-        self.data = self.data[:1000]
-        self.targets = self.targets[:1000]
+        # self.data = self.data[:1000]
+        # self.targets = self.targets[:1000]
 
         # Initialize the buffer
         self.buffer = [None] * len(self.data)
