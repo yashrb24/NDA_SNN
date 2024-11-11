@@ -1,14 +1,15 @@
-import torch
-import torchvision
-import random
-import torchvision.transforms as transforms
-from torch.utils.data import Dataset, DataLoader
-import warnings
 import os
-import numpy as np
+import random
+import warnings
 from os.path import isfile, join
 
-warnings.filterwarnings('ignore')
+import numpy as np
+import torch
+import torchvision
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader, Dataset
+
+warnings.filterwarnings("ignore")
 
 
 class Cutout(object):
@@ -31,7 +32,7 @@ class Cutout(object):
         y2 = np.clip(y + self.length // 2, 0, h)
         x1 = np.clip(x - self.length // 2, 0, w)
         x2 = np.clip(x + self.length // 2, 0, w)
-        mask[y1: y2, x1: x2] = 0.
+        mask[y1:y2, x1:x2] = 0.0
         mask = torch.from_numpy(mask)
         mask = mask.expand_as(img)
         img = img * mask
@@ -39,8 +40,12 @@ class Cutout(object):
 
 
 class NCaltech101(Dataset):
-    def __init__(self, data_path='data/n-caltech/frames_number_10_split_by_number',
-                 data_type='train', transform=False):
+    def __init__(
+        self,
+        data_path="data/n-caltech/frames_number_10_split_by_number",
+        data_type="train",
+        transform=False,
+    ):
 
         self.filepath = os.path.join(data_path)
         self.clslist = os.listdir(self.filepath)
@@ -48,7 +53,10 @@ class NCaltech101(Dataset):
 
         self.dvs_filelist = []
         self.targets = []
-        self.resize = transforms.Resize(size=(48, 48), interpolation=torchvision.transforms.InterpolationMode.NEAREST)
+        self.resize = transforms.Resize(
+            size=(48, 48),
+            interpolation=torchvision.transforms.InterpolationMode.NEAREST,
+        )
 
         for i, cls in enumerate(self.clslist):
             # print (i, cls)
@@ -59,7 +67,7 @@ class NCaltech101(Dataset):
             train_file_list = file_list[:cut_idx]
             test_split_list = file_list[cut_idx:]
             for file in file_list:
-                if data_type == 'train':
+                if data_type == "train":
                     if file in train_file_list:
                         self.dvs_filelist.append(os.path.join(self.filepath, cls, file))
                         self.targets.append(i)
@@ -70,7 +78,7 @@ class NCaltech101(Dataset):
 
         self.data_num = len(self.dvs_filelist)
         self.data_type = data_type
-        if data_type != 'train':
+        if data_type != "train":
             counts = np.unique(np.array(self.targets), return_counts=True)[1]
             class_weights = counts.sum() / (counts * len(counts))
             self.class_weights = torch.Tensor(class_weights)
@@ -82,20 +90,20 @@ class NCaltech101(Dataset):
     def __getitem__(self, index):
         file_pth = self.dvs_filelist[index]
         label = self.targets[index]
-        data = torch.from_numpy(np.load(file_pth)['frames']).float()
+        data = torch.from_numpy(np.load(file_pth)["frames"]).float()
         data = self.resize(data)
 
         if self.transform:
 
-            choices = ['roll', 'rotate', 'shear']
+            choices = ["roll", "rotate", "shear"]
             aug = np.random.choice(choices)
-            if aug == 'roll':
+            if aug == "roll":
                 off1 = random.randint(-3, 3)
                 off2 = random.randint(-3, 3)
                 data = torch.roll(data, shifts=(off1, off2), dims=(2, 3))
-            if aug == 'rotate':
+            if aug == "rotate":
                 data = self.rotate(data)
-            if aug == 'shear':
+            if aug == "shear":
                 data = self.shearx(data)
 
         return data, label
@@ -106,7 +114,7 @@ class NCaltech101(Dataset):
 
 def build_ncaltech(transform=False):
     train_dataset = NCaltech101(transform=transform)
-    val_dataset = NCaltech101(data_type='test', transform=False)
+    val_dataset = NCaltech101(data_type="test", transform=False)
 
     return train_dataset, val_dataset
 
@@ -117,7 +125,10 @@ class DVSCifar10(Dataset):
         self.transform = transform
         self.target_transform = target_transform
         self.train = train
-        self.resize = transforms.Resize(size=(48, 48), interpolation=torchvision.transforms.InterpolationMode.NEAREST)
+        self.resize = transforms.Resize(
+            size=(48, 48),
+            interpolation=torchvision.transforms.InterpolationMode.NEAREST,
+        )
         self.rotate = transforms.RandomRotation(degrees=30)
         self.shearx = transforms.RandomAffine(degrees=0, shear=(-30, 30))
 
@@ -128,20 +139,20 @@ class DVSCifar10(Dataset):
         Returns:
             tuple: (image, target) where target is index of the target class.
         """
-        data, target = torch.load(self.root + '/{}.pt'.format(index))
+        data, target = torch.load(self.root + "/{}.pt".format(index))
         data = self.resize(data.permute([3, 0, 1, 2]))
 
         if self.transform:
 
-            choices = ['roll', 'rotate', 'shear']
+            choices = ["roll", "rotate", "shear"]
             aug = np.random.choice(choices)
-            if aug == 'roll':
+            if aug == "roll":
                 off1 = random.randint(-5, 5)
                 off2 = random.randint(-5, 5)
                 data = torch.roll(data, shifts=(off1, off2), dims=(2, 3))
-            if aug == 'rotate':
+            if aug == "rotate":
                 data = self.rotate(data)
-            if aug == 'shear':
+            if aug == "shear":
                 data = self.shearx(data)
 
         return data, target.long().squeeze(-1)
@@ -150,9 +161,9 @@ class DVSCifar10(Dataset):
         return len(os.listdir(self.root))
 
 
-def build_dvscifar(path='data/cifar-dvs', transform=False):
-    train_path = path + '/train'
-    val_path = path + '/test'
+def build_dvscifar(path="data/cifar-dvs", transform=False):
+    train_path = path + "/train"
+    val_path = path + "/test"
     train_dataset = DVSCifar10(root=train_path, transform=transform)
     val_dataset = DVSCifar10(root=val_path, transform=False)
 
@@ -166,7 +177,7 @@ def mixup_criterion(criterion, pred, y_a, y_b, lam):
 def rand_bbox(size, lam):
     W = size[3]
     H = size[4]
-    cut_rat = np.sqrt(1. - lam)
+    cut_rat = np.sqrt(1.0 - lam)
     cut_w = np.int(W * cut_rat)
     cut_h = np.int(H * cut_rat)
 
@@ -197,9 +208,7 @@ def cutmix_data(input, target, alpha=1.0):
     return input, target_a, target_b, lam
 
 
-if __name__ == '__main__':
-    choices = ['roll', 'rotate', 'shear']
+if __name__ == "__main__":
+    choices = ["roll", "rotate", "shear"]
     aug = np.random.choice(choices)
     print(aug)
-
-

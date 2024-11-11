@@ -41,9 +41,9 @@ def fire_function(gamma):
 
         @staticmethod
         def backward(ctx, grad_output):
-            (input, ) = ctx.saved_tensors
+            (input,) = ctx.saved_tensors
             grad_input = grad_output.clone()
-            tmp = (input.abs() < gamma/2).float() / gamma
+            tmp = (input.abs() < gamma / 2).float() / gamma
             grad_input = grad_input * tmp
             return grad_input, None
 
