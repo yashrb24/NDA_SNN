@@ -117,7 +117,7 @@ class CIFAR10DVS(Dataset):
     def initalize_memory(self) -> None:
         start_time = time()
 
-        with ThreadPoolExecutor() as executor:
+        with ThreadPoolExecutor(max_workers=10) as executor:
             list(
                 tqdm(
                     executor.map(self.read_index, range(len(self.data))),

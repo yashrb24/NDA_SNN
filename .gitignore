@@ -41,3 +41,6 @@ Thumbs.db
 # Ignore ImageNet Pre-trained Models #
 ######################################
 *ImageNet/checkpoint/*
+
+# Ignoring wandb logs
+wandb/

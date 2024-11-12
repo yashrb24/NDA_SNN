@@ -9,6 +9,7 @@ import torch.nn as nn
 from torch import autocast
 from torch.cuda.amp import GradScaler
 from tqdm import tqdm
+import wandb
 
 from functions import build_dvscifar, build_ncaltech, seed_all
 from functions.cifar10dvs_dataset import build_dvscifar_v2
@@ -93,11 +94,11 @@ parser.add_argument(
 
 args = parser.parse_args()
 
+# Initialize wandb
+wandb.init(project="nda_snn", entity="evnn-neurips", config=vars(args))
 
 def train(model, device, train_loader, criterion, optimizer, epoch, scaler, args):
     running_loss = 0
-    # model.train()
-    M = len(train_loader)
     total = 0
     correct = 0
     s_time = time.time()
@@ -126,7 +127,22 @@ def train(model, device, train_loader, criterion, optimizer, epoch, scaler, args
         _, predicted = mean_out.cpu().max(1)
         correct += float(predicted.eq(labels.cpu()).sum().item())
     e_time = time.time()
-    return running_loss / M, 100 * correct / total, (e_time - s_time) / 60
+
+    epoch_loss = running_loss / len(train_loader)
+    epoch_acc = 100 * correct / total
+    epoch_time = (e_time - s_time) / 60
+
+    wandb.log(
+        {
+            # "epoch": epoch,
+            "train_loss": epoch_loss,
+            "train_accuracy": epoch_acc,
+            "train_time": epoch_time,
+            "learning_rate": optimizer.param_groups[0]["lr"],
+        }
+    )
+
+    return epoch_loss, epoch_acc, epoch_time
 
 
 @torch.no_grad()
@@ -134,7 +150,7 @@ def test(model, test_loader, device):
     correct = 0
     total = 0
     model.eval()
-    for batch_idx, (inputs, targets) in enumerate(test_loader):
+    for batch_idx, (inputs, targets) in enumerate(tqdm(test_loader)):
         inputs = inputs.to(device)
         outputs = model(inputs)
         mean_out = outputs.mean(1)
@@ -157,7 +173,6 @@ if __name__ == "__main__":
         num_cls = 101
         in_c = 2
     elif args.dset == "dc10":
-        # train_dataset, val_dataset = build_dvscifar(transform=args.nda)
         print(f"Fold index: {args.fold_idx}")
         train_dataset, val_dataset = build_dvscifar_v2(fold_idx=args.fold_idx)
         num_cls = 10
@@ -182,12 +197,18 @@ if __name__ == "__main__":
 
     if args.model == "vgg11":
         model = vgg11(in_c=in_c, num_classes=num_cls)
+        # print parameter count of the model in human readable format, K/M/G
+        total_params = sum(p.numel() for p in model.parameters())
+        print(f"Total number of parameters: {total_params/1e6:.2f}M")
+
     else:
         raise NotImplementedError
 
     model.T = args.time
-    # model.cuda()
+    model.cuda()
     device = next(model.parameters()).device
+    
+    wandb.watch(model, log="all", log_freq=100)
 
     scaler = GradScaler() if args.amp else None
 
@@ -200,7 +221,6 @@ if __name__ == "__main__":
     )
     print("start training!")
     for epoch in range(args.epochs):
-
         loss, acc, t_diff = train(
             model, device, train_loader, criterion, optimizer, epoch, scaler, args
         )
@@ -212,3 +232,11 @@ if __name__ == "__main__":
         scheduler.step()
         facc = test(model, test_loader, device)
         print("Epoch:[{}/{}]\t Test acc={:.3f}".format(epoch, args.epochs, facc))
+
+        wandb.log(
+            {
+                "test_accuracy": facc,
+            }
+        )
+
+    wandb.finish()
