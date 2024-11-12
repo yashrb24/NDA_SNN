@@ -44,3 +44,6 @@ Thumbs.db
 
 # Ignoring wandb logs
 wandb/
+
+# Ignore scripts
+logs/

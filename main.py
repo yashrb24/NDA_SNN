@@ -203,6 +203,9 @@ if __name__ == "__main__":
 
     else:
         raise NotImplementedError
+    
+    # log fold index
+    wandb.log({"fold_index": args.fold_idx})
 
     model.T = args.time
     model.cuda()
