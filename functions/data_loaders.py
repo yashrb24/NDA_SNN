@@ -137,10 +137,7 @@ class DVSCifar10(Dataset):
         self.shearx = transforms.RandomAffine(degrees=0, shear=(-30, 30))
         self.cutout = Cutout(16)
         self.indices = indices
-        # map 0, 1, 2, ... to indices[0], indices[1], indices[2], ...
-        if self.indices is not None:
-            self.indices_map = {i: idx for i, idx in enumerate(self.indices)}
-            self.indices_map_inv = {idx: i for i, idx in enumerate(self.indices)}
+        # now 0, 1, 2, ... are mapped to indices[0], indices[1], indices[2], ...
 
     def __getitem__(self, index):
         """
@@ -150,7 +147,7 @@ class DVSCifar10(Dataset):
             tuple: (image, target) where target is index of the target class.
         """
         if self.indices is not None:
-            index = self.indices_map[index]
+            index = self.indices[index]
         data, target = torch.load(self.root + "/{}.pt".format(index))
         data = self.resize(data.permute([3, 0, 1, 2]))
 
@@ -174,7 +171,10 @@ class DVSCifar10(Dataset):
         return data, target.long().squeeze(-1)
 
     def __len__(self):
-        return len(os.listdir(self.root))
+        if self.indices is not None:
+            return len(self.indices)
+        else:
+            return len(os.listdir(self.root))
 
 
 def build_dvscifar(path="/p/scratch/eelsaisdc/bania1/Cifar10DVS_frames", transform=False):
@@ -206,6 +206,7 @@ def dvscifar10_collate_fn(batch):
     data = torch.stack([x[0] for x in batch])
     target = torch.stack([x[1] for x in batch])
     data, target_a, target_b, lam = cutmix_data(data, target)
+    lam = torch.tensor(lam).float()
     return data, target_a, target_b, lam
 
 
@@ -217,8 +218,8 @@ def rand_bbox(size, lam):
     W = size[3]
     H = size[4]
     cut_rat = np.sqrt(1.0 - lam)
-    cut_w = np.int(W * cut_rat)
-    cut_h = np.int(H * cut_rat)
+    cut_w = int(W * cut_rat)
+    cut_h = int(H * cut_rat)
 
     # uniform
     cx = np.random.randint(W)
@@ -234,7 +235,7 @@ def rand_bbox(size, lam):
 
 def cutmix_data(input, target, alpha=1.0):
     lam = np.random.beta(alpha, alpha)
-    rand_index = torch.randperm(input.size()[0]).cuda()
+    rand_index = torch.randperm(input.size()[0])
 
     target_a = target
     target_b = target[rand_index]

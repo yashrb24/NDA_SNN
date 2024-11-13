@@ -15,7 +15,7 @@ parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
                     help='number of data loading workers (default: 10)')
 parser.add_argument('--epochs', default=200, type=int, metavar='N',
                     help='number of total epochs to run')
-parser.add_argument('--dset', default='nc101', type=str, metavar='N', choices=['nc101', 'dc10'],
+parser.add_argument('--dset', default='nc101', type=str, metavar='N', choices=['nc101', 'dc10', '10_fold'],
                     help='dataset')
 parser.add_argument('--model', default='vgg11', type=str, metavar='N', choices=[ 'vgg11'],
                     help='neural network architecture')
@@ -156,8 +156,7 @@ if __name__ == '__main__':
                                                         num_workers=args.workers, pin_memory=True, 
                                                         collate_fn=dvscifar10_collate_fn)
             test_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
-                                                      num_workers=args.workers, pin_memory=True, 
-                                                      collate_fn=dvscifar10_collate_fn)
+                                                      num_workers=args.workers, pin_memory=True)
 
             if args.model == 'vgg11':
                 model = vgg11(in_c=in_c, num_classes=num_cls)
