@@ -179,11 +179,17 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr/256 * args.batch_size, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, eta_min=0, T_max=args.epochs)
     print('start training!')
+    best_test = 0
     for epoch in range(args.epochs):
 
         loss, acc, t_diff = train_fn(model, device, train_loader, criterion, optimizer, epoch, scaler, args)
         print('Epoch:[{}/{}]\t loss={:.5f}\t acc={:.3f},\t time elapsed: {}'.format(epoch, args.epochs, loss, acc,
                                                                                     t_diff))
-    scheduler.step()
-    facc = test(model, test_loader, device)
-    print('Epoch:[{}/{}]\t Test acc={:.3f}'.format(epoch, args.epochs, facc))
+        scheduler.step()
+        facc = test(model, test_loader, device)
+        if facc > best_test:
+            best_test = facc
+        print('Epoch:[{}/{}]\t Test acc={:.3f}'.format(epoch, args.epochs, facc))
+
+    print('Training finished!')
+    print('Best test acc: {}'.format(best_test))
