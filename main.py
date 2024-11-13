@@ -153,11 +153,14 @@ if __name__ == '__main__':
 
     if args.dset == '10_fold':
         train_fn = train_with_mixup
+        collate_fn = dvscifar10_collate_fn
     else:
         train_fn = train
+        collate_fn = None
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-                                            num_workers=args.workers, pin_memory=True)
+                                            num_workers=args.workers, pin_memory=True,
+                                            collate_fn=collate_fn)
     test_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
                                             num_workers=args.workers, pin_memory=True)
 
@@ -178,7 +181,7 @@ if __name__ == '__main__':
     print('start training!')
     for epoch in range(args.epochs):
 
-        loss, acc, t_diff = train(model, device, train_loader, criterion, optimizer, epoch, scaler, args)
+        loss, acc, t_diff = train_fn(model, device, train_loader, criterion, optimizer, epoch, scaler, args)
         print('Epoch:[{}/{}]\t loss={:.5f}\t acc={:.3f},\t time elapsed: {}'.format(epoch, args.epochs, loss, acc,
                                                                                     t_diff))
     scheduler.step()
