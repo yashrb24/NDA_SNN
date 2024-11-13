@@ -13,7 +13,7 @@ from functions import seed_all, build_ncaltech, build_dvscifar, build_dvscifar_1
 parser = argparse.ArgumentParser(description='PyTorch Neuromorphic Data Augmentation')
 parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
                     help='number of data loading workers (default: 10)')
-parser.add_argument('--fold_idx', default=0, type=int, metavar='N',
+parser.add_argument('--fold_idx', default=-1, type=int, metavar='N',
                     help='fold index (help to run in parallel)')
 parser.add_argument('--epochs', default=200, type=int, metavar='N',
                     help='number of total epochs to run')
@@ -135,6 +135,10 @@ def test(model, test_loader, device):
 if __name__ == '__main__':
 
     seed_all(args.seed)
+
+    if args.fold_idx != -1 and args.dset != '10_fold':
+        print('Running in parallel mode! but dataset was not 10_fold, reset to 10_fold.')
+        args.dset = '10_fold'
 
     if args.dset == 'nc101':
         train_dataset, val_dataset = build_ncaltech(transform=args.nda)

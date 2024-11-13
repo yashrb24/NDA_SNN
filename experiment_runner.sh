@@ -17,4 +17,4 @@ source ~/.bash_profile
 load_v1
 activate_evm
 
-python3 main.py --dset dc10 --amp --nda --fold_idx $1
+python3 main.py --dset 10_fold --amp --nda --fold_idx $1
