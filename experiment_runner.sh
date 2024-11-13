@@ -9,11 +9,12 @@
 #SBATCH --mem=128G
 #SBATCH --gres=gpu:4
 #SBATCH --hint=multithread
-#SBATCH --output=/p/project1/eelsaisdc/bhisikar1/projects/NDA_SNN/logs/%j.out
-#SBATCH --error=/p/project1/eelsaisdc/bhisikar1/projects/NDA_SNN/logs/%j.err
+#SBATCH --output=./logs/%j.out
+#SBATCH --error=./logs/%j.err
 
 # Load the required modules and activate the virtual environment
-source ~/init_scripts/init_event_mamba.sh
+source ~/.bash_profile
+load_v1
+activate_evm
 
-cd /p/project1/eelsaisdc/bhisikar1/projects/NDA_SNN
-python main.py --dset dc10 --amp --nda --fold_idx $1
+python3 main.py --dset 10_fold --amp --nda --fold_idx $1

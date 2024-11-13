@@ -3,11 +3,14 @@ import random
 import warnings
 from os.path import isfile, join
 
+import pickle
 import numpy as np
 import torch
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, Dataset
+
+from typing import List, Optional
 
 warnings.filterwarnings("ignore")
 
@@ -19,19 +22,20 @@ class Cutout(object):
         length (int): The length (in pixels) of each square patch.
     """
 
-    def __init__(self, length):
-        self.length = length
+    def __init__(self, max_length):
+        self.max_length = max_length
 
     def __call__(self, img):
+        length = np.random.randint(1, self.max_length + 1)
         h = img.size(2)
         w = img.size(3)
         mask = np.ones((h, w), np.float32)
         y = np.random.randint(h)
         x = np.random.randint(w)
-        y1 = np.clip(y - self.length // 2, 0, h)
-        y2 = np.clip(y + self.length // 2, 0, h)
-        x1 = np.clip(x - self.length // 2, 0, w)
-        x2 = np.clip(x + self.length // 2, 0, w)
+        y1 = np.clip(y - length // 2, 0, h)
+        y2 = np.clip(y + length // 2, 0, h)
+        x1 = np.clip(x - length // 2, 0, w)
+        x2 = np.clip(x + length // 2, 0, w)
         mask[y1:y2, x1:x2] = 0.0
         mask = torch.from_numpy(mask)
         mask = mask.expand_as(img)
@@ -120,7 +124,7 @@ def build_ncaltech(transform=False):
 
 
 class DVSCifar10(Dataset):
-    def __init__(self, root, train=True, transform=None, target_transform=None):
+    def __init__(self, root, train=True, transform=None, target_transform=None, indices: Optional[List[int]] = None):
         self.root = os.path.expanduser(root)
         self.transform = transform
         self.target_transform = target_transform
@@ -129,8 +133,12 @@ class DVSCifar10(Dataset):
             size=(48, 48),
             interpolation=torchvision.transforms.InterpolationMode.NEAREST,
         )
+        self.flip = transforms.RandomHorizontalFlip(p=0.5)
         self.rotate = transforms.RandomRotation(degrees=30)
         self.shearx = transforms.RandomAffine(degrees=0, shear=(-30, 30))
+        self.cutout = Cutout(16)
+        self.indices = indices
+        # now 0, 1, 2, ... are mapped to indices[0], indices[1], indices[2], ...
 
     def __getitem__(self, index):
         """
@@ -139,12 +147,16 @@ class DVSCifar10(Dataset):
         Returns:
             tuple: (image, target) where target is index of the target class.
         """
+        if self.indices is not None:
+            index = self.indices[index]
         data, target = torch.load(self.root + "/{}.pt".format(index))
         data = self.resize(data.permute([3, 0, 1, 2]))
 
         if self.transform:
 
-            choices = ["roll", "rotate", "shear"]
+            data = self.flip(data)
+
+            choices = ["roll", "rotate", "shear", "cutout"]
             aug = np.random.choice(choices)
             if aug == "roll":
                 off1 = random.randint(-5, 5)
@@ -154,20 +166,63 @@ class DVSCifar10(Dataset):
                 data = self.rotate(data)
             if aug == "shear":
                 data = self.shearx(data)
+            if aug == "cutout":
+                data = self.cutout(data)
 
         return data, target.long().squeeze(-1)
 
     def __len__(self):
-        return len(os.listdir(self.root))
+        if self.indices is not None:
+            return len(self.indices)
+        else:
+            return len(os.listdir(self.root))
 
 
-def build_dvscifar(path="data/cifar-dvs", transform=False):
+def build_dvscifar(path="/p/scratch/eelsaisdc/bania1/Cifar10DVS_frames", transform=False):
     train_path = path + "/train"
     val_path = path + "/test"
     train_dataset = DVSCifar10(root=train_path, transform=transform)
     val_dataset = DVSCifar10(root=val_path, transform=False)
 
     return train_dataset, val_dataset
+
+
+def build_dvscifar_10_fold(path="/p/scratch/eelsaisdc/bania1/Cifar10DVS_frames", transform=False, fold_idx=0):
+    if "indices.pkl" in os.listdir(path + "/combined"):
+        # load the indices, this happens when we run adter the first time
+        indices = pickle.load(open(path + "/combined/indices.pkl", "rb"))
+        train_inds = indices[fold_idx][0]
+        val_inds = indices[fold_idx][1]
+        train_dataset = DVSCifar10(root=path + "/combined", transform=transform, indices=train_inds)
+        val_dataset = DVSCifar10(root=path + "/combined", transform=False, indices=val_inds)
+    else:
+        print("Creating indices for the 10-fold experiment, it is advisable to launch other runs after a small delay.")
+        # create the indices, this happens the first time
+        total = 10000
+        indices = list(range(total))
+        random.shuffle(indices)
+        index_tuples = []
+        for i in range(10):
+            train_indices = indices[: i * 1000] + indices[(i + 1) * 1000 :]
+            val_indices = indices[i * 1000 : (i + 1) * 1000]
+            index_tuples.append((train_indices, val_indices))
+
+        pickle.dump(index_tuples, open(path + "/combined/indices.pkl", "wb"))
+        train_inds = index_tuples[fold_idx][0]
+        val_inds = index_tuples[fold_idx][1]
+        train_dataset = DVSCifar10(root=path + "/combined", transform=transform, indices=train_inds)
+        val_dataset = DVSCifar10(root=path + "/combined", transform=False, indices=val_inds)
+
+    return train_dataset, val_dataset
+
+
+def dvscifar10_collate_fn(batch):
+    # need to apply cutmix here
+    data = torch.stack([x[0] for x in batch])
+    target = torch.stack([x[1] for x in batch])
+    data, target_a, target_b, lam = cutmix_data(data, target)
+    lam = torch.tensor(lam).float()
+    return data, target_a, target_b, lam
 
 
 def mixup_criterion(criterion, pred, y_a, y_b, lam):
@@ -178,8 +233,8 @@ def rand_bbox(size, lam):
     W = size[3]
     H = size[4]
     cut_rat = np.sqrt(1.0 - lam)
-    cut_w = np.int(W * cut_rat)
-    cut_h = np.int(H * cut_rat)
+    cut_w = int(W * cut_rat)
+    cut_h = int(H * cut_rat)
 
     # uniform
     cx = np.random.randint(W)
@@ -195,7 +250,7 @@ def rand_bbox(size, lam):
 
 def cutmix_data(input, target, alpha=1.0):
     lam = np.random.beta(alpha, alpha)
-    rand_index = torch.randperm(input.size()[0]).cuda()
+    rand_index = torch.randperm(input.size()[0])
 
     target_a = target
     target_b = target[rand_index]
