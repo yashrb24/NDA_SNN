@@ -13,6 +13,8 @@ from functions import seed_all, build_ncaltech, build_dvscifar, build_dvscifar_1
 parser = argparse.ArgumentParser(description='PyTorch Neuromorphic Data Augmentation')
 parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
                     help='number of data loading workers (default: 10)')
+parser.add_argument('--fold_idx', default=0, type=int, metavar='N',
+                    help='fold index (help to run in parallel)')
 parser.add_argument('--epochs', default=200, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--dset', default='nc101', type=str, metavar='N', choices=['nc101', 'dc10', '10_fold'],
@@ -143,76 +145,42 @@ if __name__ == '__main__':
         num_cls = 10
         in_c = 2
     elif args.dset == '10_fold':
-        dataset_tuples = build_dvscifar_10_fold(transform=args.nda)
+        train_dataset, val_dataset = build_dvscifar_10_fold(transform=args.nda, fold_idx=args.fold_idx)
         num_cls = 10
         in_c = 2
     else:
         raise NotImplementedError
 
     if args.dset == '10_fold':
-        accuracies = []
-        for i, (train_dataset, val_dataset) in enumerate(dataset_tuples):
-            train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-                                                        num_workers=args.workers, pin_memory=True, 
-                                                        collate_fn=dvscifar10_collate_fn)
-            test_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
-                                                      num_workers=args.workers, pin_memory=True)
-
-            if args.model == 'vgg11':
-                model = vgg11(in_c=in_c, num_classes=num_cls)
-            else:
-                raise NotImplementedError
-
-            model.T = args.time
-            model.cuda()
-            device = next(model.parameters()).device
-
-            scaler = GradScaler() if args.amp else None
-
-            criterion = nn.CrossEntropyLoss().to(device)
-            optimizer = torch.optim.Adam(model.parameters(), lr=args.lr/256 * args.batch_size, weight_decay=1e-4)
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, eta_min=0, T_max=args.epochs)
-            print('start training!')
-            for epoch in range(args.epochs):
-
-                loss, acc, t_diff = train_with_mixup(model, device, train_loader, criterion, optimizer, epoch, scaler, args)
-                print('Epoch:[{}/{}]\t loss={:.5f}\t acc={:.3f},\t time elapsed: {}'.format(epoch, args.epochs, loss, acc,
-                                                                                            t_diff))
-                scheduler.step()
-                facc = test(model, test_loader, device)
-                print('Epoch:[{}/{}]\t Test acc={:.3f}'.format(epoch, args.epochs, facc))
-                accuracies.append(facc)
-
-        print('10 fold accuracies:', accuracies)
-        print('mean accuracy:', sum(accuracies) / len(accuracies))
-        print('std accuracy:', torch.tensor(accuracies).std())
-
+        train_fn = train_with_mixup
     else:
-        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-                                                num_workers=args.workers, pin_memory=True)
-        test_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
-                                                num_workers=args.workers, pin_memory=True)
+        train_fn = train
 
-        if args.model == 'vgg11':
-            model = vgg11(in_c=in_c, num_classes=num_cls)
-        else:
-            raise NotImplementedError
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
+                                            num_workers=args.workers, pin_memory=True)
+    test_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
+                                            num_workers=args.workers, pin_memory=True)
 
-        model.T = args.time
-        model.cuda()
-        device = next(model.parameters()).device
+    if args.model == 'vgg11':
+        model = vgg11(in_c=in_c, num_classes=num_cls)
+    else:
+        raise NotImplementedError
 
-        scaler = GradScaler() if args.amp else None
+    model.T = args.time
+    model.cuda()
+    device = next(model.parameters()).device
 
-        criterion = nn.CrossEntropyLoss().to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr/256 * args.batch_size, weight_decay=1e-4)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, eta_min=0, T_max=args.epochs)
-        print('start training!')
-        for epoch in range(args.epochs):
+    scaler = GradScaler() if args.amp else None
 
-            loss, acc, t_diff = train(model, device, train_loader, criterion, optimizer, epoch, scaler, args)
-            print('Epoch:[{}/{}]\t loss={:.5f}\t acc={:.3f},\t time elapsed: {}'.format(epoch, args.epochs, loss, acc,
-                                                                                        t_diff))
-            scheduler.step()
-            facc = test(model, test_loader, device)
-            print('Epoch:[{}/{}]\t Test acc={:.3f}'.format(epoch, args.epochs, facc))
+    criterion = nn.CrossEntropyLoss().to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr/256 * args.batch_size, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, eta_min=0, T_max=args.epochs)
+    print('start training!')
+    for epoch in range(args.epochs):
+
+        loss, acc, t_diff = train(model, device, train_loader, criterion, optimizer, epoch, scaler, args)
+        print('Epoch:[{}/{}]\t loss={:.5f}\t acc={:.3f},\t time elapsed: {}'.format(epoch, args.epochs, loss, acc,
+                                                                                    t_diff))
+    scheduler.step()
+    facc = test(model, test_loader, device)
+    print('Epoch:[{}/{}]\t Test acc={:.3f}'.format(epoch, args.epochs, facc))

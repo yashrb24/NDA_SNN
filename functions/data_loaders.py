@@ -3,6 +3,7 @@ import random
 import warnings
 from os.path import isfile, join
 
+import pickle
 import numpy as np
 import torch
 import torchvision
@@ -186,19 +187,33 @@ def build_dvscifar(path="/p/scratch/eelsaisdc/bania1/Cifar10DVS_frames", transfo
     return train_dataset, val_dataset
 
 
-def build_dvscifar_10_fold(path="/p/scratch/eelsaisdc/bania1/Cifar10DVS_frames", transform=False):
-    total = 10000
-    indices = list(range(total))
-    random.shuffle(indices)
-    dataset_tuples = []
-    for i in range(10):
-        train_indices = indices[: i * 1000] + indices[(i + 1) * 1000 :]
-        train_dataset = DVSCifar10(root=path + "/combined", transform=transform, indices=train_indices)
-        val_indices = indices[i * 1000 : (i + 1) * 1000]
-        val_dataset = DVSCifar10(root=path + "/combined", transform=False, indices=val_indices)
-        dataset_tuples.append((train_dataset, val_dataset))
+def build_dvscifar_10_fold(path="/p/scratch/eelsaisdc/bania1/Cifar10DVS_frames", transform=False, fold_idx=0):
+    if "indices.pkl" in os.listdir(path + "/combined"):
+        # load the indices, this happens when we run adter the first time
+        indices = pickle.load(open(path + "/combined/indices.pkl", "rb"))
+        train_inds = indices[fold_idx][0]
+        val_inds = indices[fold_idx][1]
+        train_dataset = DVSCifar10(root=path + "/combined", transform=transform, indices=train_inds)
+        val_dataset = DVSCifar10(root=path + "/combined", transform=False, indices=val_inds)
+    else:
+        print("Creating indices for the 10-fold experiment, it is advisable to launch other runs after a small delay.")
+        # create the indices, this happens the first time
+        total = 10000
+        indices = list(range(total))
+        random.shuffle(indices)
+        index_tuples = []
+        for i in range(10):
+            train_indices = indices[: i * 1000] + indices[(i + 1) * 1000 :]
+            val_indices = indices[i * 1000 : (i + 1) * 1000]
+            index_tuples.append((train_indices, val_indices))
 
-    return dataset_tuples
+        pickle.dump(index_tuples, open(path + "/combined/indices.pkl", "wb"))
+        train_inds = index_tuples[fold_idx][0]
+        val_inds = index_tuples[fold_idx][1]
+        train_dataset = DVSCifar10(root=path + "/combined", transform=transform, indices=train_inds)
+        val_dataset = DVSCifar10(root=path + "/combined", transform=False, indices=val_inds)
+
+    return train_dataset, val_dataset
 
 
 def dvscifar10_collate_fn(batch):
